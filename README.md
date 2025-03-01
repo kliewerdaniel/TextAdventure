@@ -119,9 +119,6 @@ After running the generator, open `_stories/index.md` to start the adventure. Ea
 - Adjust the story length to create shorter or longer segments
 - Edit the prompts in the code to customize the story generation process
 
-## License
-
-[Specify your license here]
 
 ## Acknowledgments
 
