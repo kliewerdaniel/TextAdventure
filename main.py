@@ -487,9 +487,9 @@ def save_markdown(story: str, image_filename: str, filename: str,
             jekyll_link = target_file.replace(".md", "")
             # Use the title of the target page as the link text
             target_title = titles.get(target, description)  # Fallback to description if title not found
-            choices_md += f"* [{target_title}](/{config['output_dir']}/{jekyll_link})\n"
+            choices_md += f"* [{target_title}](/stories/{jekyll_link})\n"
     else:
-        choices_md += "* [The End](/{}/index)\n".format(config['output_dir'])
+        choices_md += "* [The End](/stories/index)\n"
     
     # Create the Markdown content with YAML front matter
     md_content = f"""---
@@ -568,7 +568,7 @@ Choose your starting point:
         story_file = image_file.replace(".jpg", ".md").replace(".jpeg", ".md").replace(".png", ".md").replace(".webp", ".md")
         # Then remove the .md extension for Jekyll compatibility
         jekyll_link = story_file.replace(".md", "")
-        index_content += f"* [{title}](/{config['output_dir']}/{jekyll_link})\n"
+        index_content += f"* [{title}](/stories/{jekyll_link})\n"
     
     index_content += """
 ---
