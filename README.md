@@ -14,13 +14,14 @@ The result is a set of markdown files that can be viewed as an interactive story
 
 ## Features
 
-- **Image Analysis**: Uses the LLaVA vision model to extract detailed descriptions from images
-- **Story Generation**: Creates narrative segments based on image content using Mistral language model
+- **Image Analysis**: Uses the Gemma 2 vision model to extract detailed descriptions from images
+- **Story Generation**: Creates narrative segments based on image content using Llama 3.3 language model
 - **Thematic Coherence**: Identifies common themes across all story segments and rewrites content for consistency
 - **Interactive Branching**: Automatically generates meaningful connections between story segments
 - **Customizable Style**: Supports multiple narrative styles (adventure, mystery, fantasy, sci-fi)
 - **Caching System**: Saves API responses to reduce processing time and costs on subsequent runs
 - **Markdown Output**: Generates properly formatted markdown files with navigation links
+- **Memory Management**: Processes images in batches with configurable delays to prevent memory issues
 
 ## Requirements
 
@@ -45,8 +46,8 @@ The result is a set of markdown files that can be viewed as an interactive story
 3. Ensure Ollama is installed and running on your system
 4. Download the required models:
    ```
-   ollama pull llava:latest
-   ollama pull mistral-small:24b-instruct-2501-q8_0
+   ollama pull gemma2:27b
+   ollama pull llama3.3:latest
    ```
 
 ## Usage
@@ -65,13 +66,17 @@ This will:
 ### Command Line Options
 
 ```bash
-python main.py --input INPUT_DIR --output OUTPUT_DIR --style STYLE --length WORD_COUNT --config CONFIG_FILE --no-cache
+python main.py --input INPUT_DIR --output OUTPUT_DIR --style STYLE --length WORD_COUNT --batch-size BATCH_SIZE --delay DELAY --start START_NUM --end END_NUM --config CONFIG_FILE --no-cache
 ```
 
 - `--input`: Directory containing images (default: "input_images")
 - `--output`: Directory for story files (default: "_stories")
 - `--style`: Narrative style - "adventure", "mystery", "fantasy", or "sci-fi" (default: "adventure")
 - `--length`: Approximate word count per story segment (default: 300)
+- `--batch-size`: Number of images to process before taking a longer break (default: 10)
+- `--delay`: Delay in seconds between processing images (default: 5)
+- `--start`: Start processing from this image number (default: 1)
+- `--end`: End processing at this image number (optional)
 - `--config`: Path to JSON configuration file
 - `--no-cache`: Disable caching of API responses
 
@@ -83,13 +88,17 @@ You can customize the application by creating a JSON configuration file:
 {
   "input_dir": "my_images",
   "output_dir": "my_adventure",
-  "vision_model": "llava:latest",
-  "text_model": "mistral-small:24b-instruct-2501-q8_0",
+  "vision_model": "gemma2:27b",
+  "text_model": "llama3.3:latest",
   "story_length": 500,
   "temperature": 0.8,
   "narrative_style": "fantasy",
   "retry_attempts": 3,
-  "retry_delay": 2
+  "retry_delay": 2,
+  "batch_size": 5,
+  "inter_image_delay": 10,
+  "start_image": 1,
+  "end_image": 20
 }
 ```
 
@@ -108,7 +117,41 @@ The generator creates:
    - A story segment
    - Links to connected story segments
 
-## Example
+## Troubleshooting
+
+If you encounter issues while using the generator, please refer to the [Troubleshooting Guide](TROUBLESHOOTING.md) for solutions to common problems.
+
+## Examples
+
+### Example Script
+
+An example script `example.sh` is provided to demonstrate different ways to use the generator:
+
+```bash
+# Make the script executable
+chmod +x example.sh
+
+# Run the example
+./example.sh
+```
+
+The script shows how to:
+- Process a subset of images to avoid memory issues
+- Use different narrative styles
+- Customize story length
+- Use custom input and output directories
+- Use a configuration file
+
+### Sample Configuration
+
+A sample configuration file `sample_config.json` is provided as a template:
+
+```bash
+# Run with the sample configuration
+python main.py --config sample_config.json
+```
+
+### Output
 
 After running the generator, open `_stories/index.md` to start the adventure. Each page will present a story segment with choices that lead to other segments, creating a branching narrative experience.
 
@@ -124,5 +167,5 @@ After running the generator, open `_stories/index.md` to start the adventure. Ea
 
 This project uses:
 - Ollama for local AI model hosting
-- LLaVA for vision analysis
-- Mistral for text generation
+- Gemma 2 for vision analysis
+- Llama 3.3 for text generation

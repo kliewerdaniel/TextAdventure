@@ -23,14 +23,16 @@ DEFAULT_CONFIG = {
     "input_dir": "input_images",
     "output_dir": "_stories",
     "cache_dir": ".cache",
-    "vision_model": "llava:latest",
-    "text_model": "mistral-small:24b-instruct-2501-q8_0",
+    "vision_model": "gemma2:27b",
+    "text_model": "llama3.3:latest",
     "story_length": 300,
     "image_extensions": [".jpg", ".jpeg", ".png", ".webp"],
-    "temperature": 0.7,
+    "temperature": 0.3,
     "narrative_style": "adventure",  # Options: adventure, mystery, fantasy, sci-fi
     "retry_attempts": 3,
     "retry_delay": 2,
+    "batch_size": 10,  # Process images in smaller batches
+    "inter_image_delay": 5,  # Delay between processing images (seconds)
 }
 
 
@@ -43,6 +45,12 @@ def parse_arguments():
                         default=DEFAULT_CONFIG["narrative_style"])
     parser.add_argument("--length", help="Approximate word count per story segment", type=int, 
                         default=DEFAULT_CONFIG["story_length"])
+    parser.add_argument("--batch-size", help="Number of images to process before taking a longer break", type=int,
+                        default=DEFAULT_CONFIG["batch_size"])
+    parser.add_argument("--delay", help="Delay in seconds between processing images", type=int,
+                        default=DEFAULT_CONFIG["inter_image_delay"])
+    parser.add_argument("--start", help="Start processing from this image number", type=int, default=1)
+    parser.add_argument("--end", help="End processing at this image number", type=int)
     parser.add_argument("--config", help="Path to JSON configuration file")
     parser.add_argument("--no-cache", help="Disable caching", action="store_true")
     return parser.parse_args()
@@ -71,6 +79,14 @@ def load_config(args) -> dict:
         config["narrative_style"] = args.style
     if args.length:
         config["story_length"] = args.length
+    if args.batch_size:
+        config["batch_size"] = args.batch_size
+    if args.delay:
+        config["inter_image_delay"] = args.delay
+    if args.start:
+        config["start_image"] = args.start
+    if args.end:
+        config["end_image"] = args.end
     if args.no_cache:
         config["use_cache"] = False
     else:
@@ -206,7 +222,7 @@ def generate_story(image_analysis: str, config: dict) -> str:
     length = config["story_length"]
     
     style_prompts = {
-        "adventure": "story about Daniel Kliewer overcoming homelessness with the help of artificial intelligence by teaching himself all about it and selling his art to buy a phone then a chromebook then a computer and eventually was able to become housed again",
+        "adventure": "exciting adventure scene with action and danger navigating the streets of Austin reniscent of Heart of Darkness",
         "mystery": "intriguing mystery scene with suspense and clues",
         "fantasy": "magical fantasy scene with wonder and imagination",
         "sci-fi": "futuristic sci-fi scene with technological elements"
@@ -224,8 +240,8 @@ def generate_story(image_analysis: str, config: dict) -> str:
     - Write approximately {length} words
     - Use vivid, sensory descriptions
     - Include dialogue if appropriate
-    - Create a scene that feels like part of a larger story
-    - End in a way that suggests possible continuations
+    - Create a scene that feels like part of a larger story and do not resolve all conflicts
+    - End in a way that suggests possible continuations and branching paths
     
     Your scene:
     """
@@ -400,6 +416,7 @@ def rewrite_story(original_story: str, themes: str, config: dict) -> str:
     - Maintain approximately the same length ({config["story_length"]} words)
     - Preserve key plot points and characters
     - Add subtle references to the identified themes
+    - Ensure that a universal theme is present in all segments
     - Adjust tone and style for consistency with the overall narrative
     - End in a way that suggests possible branching paths
     
@@ -620,16 +637,86 @@ def main():
     
     logger.info(f"Found {len(image_files)} images to process")
     
+    # Process images in batches to avoid memory issues
+    batch_size = config.get("batch_size", 10)
+    inter_image_delay = config.get("inter_image_delay", 5)
+    
     # Process images and generate initial stories
     stories = {}
-    for i, image_file in enumerate(image_files):
-        logger.info(f"Processing image {i+1}/{len(image_files)}: {image_file.name}")
-        analysis = analyze_image(str(image_file), config)
-        story = generate_story(analysis, config)
-        stories[image_file.name] = story
     
-    # Extract overall themes
-    logger.info("Extracting themes across all stories")
+    # Sort image files to ensure consistent ordering
+    image_files = sorted(image_files, key=lambda x: x.name)
+    
+    # Filter images based on start and end parameters
+    start_image = config.get("start_image", 1)
+    end_image = config.get("end_image", None)
+    
+    filtered_image_files = []
+    for image_file in image_files:
+        try:
+            # Extract the numeric part of the filename
+            filename = image_file.name
+            # Remove extension
+            filename_without_ext = os.path.splitext(filename)[0]
+            # Try to convert to integer
+            image_num = int(filename_without_ext)
+            
+            # Check if the image number is within the specified range
+            if image_num >= start_image and (end_image is None or image_num <= end_image):
+                filtered_image_files.append(image_file)
+        except ValueError:
+            # If the filename is not a number, include it by default
+            filtered_image_files.append(image_file)
+    
+    if not filtered_image_files:
+        logger.error(f"No images found in the specified range (start={start_image}, end={end_image}). Exiting.")
+        return
+        
+    logger.info(f"Processing {len(filtered_image_files)} images in the specified range")
+    
+    for i, image_file in enumerate(filtered_image_files):
+        logger.info(f"Processing image {i+1}/{len(filtered_image_files)}: {image_file.name}")
+        
+        try:
+            # Add a delay between processing images to allow memory to be freed
+            if i > 0 and inter_image_delay > 0:
+                logger.info(f"Waiting {inter_image_delay} seconds before processing next image...")
+                time.sleep(inter_image_delay)
+            
+            # Try to analyze the image and generate a story
+            analysis = analyze_image(str(image_file), config)
+            
+            # Check if analysis failed
+            if analysis.startswith("ERROR:"):
+                logger.warning(f"Skipping story generation for {image_file.name} due to analysis failure")
+                continue
+                
+            story = generate_story(analysis, config)
+            
+            # Check if story generation failed
+            if story.startswith("ERROR:"):
+                logger.warning(f"Skipping {image_file.name} due to story generation failure")
+                continue
+                
+            stories[image_file.name] = story
+            
+            # If we've processed a batch, take a longer break to allow memory cleanup
+            if (i + 1) % batch_size == 0 and i < len(filtered_image_files) - 1:
+                logger.info(f"Completed batch of {batch_size} images. Taking a break...")
+                time.sleep(inter_image_delay * 3)  # Longer break between batches
+                
+        except Exception as e:
+            logger.error(f"Error processing image {image_file.name}: {e}")
+            logger.info(f"Continuing with next image...")
+            continue
+    
+    # Check if we have any successful stories
+    if not stories:
+        logger.error("No stories were successfully generated. Exiting.")
+        return
+        
+    # Extract overall themes from the stories we have
+    logger.info(f"Extracting themes across {len(stories)} successfully processed stories")
     theme_summary = extract_themes(list(stories.values()), config)
     
     # Rewrite stories for coherence
